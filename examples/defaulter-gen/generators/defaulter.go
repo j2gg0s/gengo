@@ -772,19 +772,26 @@ func (g *genDefaulter) Imports(c *generator.Context) (imports []string) {
 func (g *genDefaulter) Init(c *generator.Context, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
-	scheme := c.Universe.Type(types.Name{Package: runtimePackagePath, Name: "Scheme"})
-	schemePtr := &types.Type{
-		Kind: types.Pointer,
-		Elem: scheme,
-	}
-	sw.Do("// RegisterDefaults adds defaulters functions to the given scheme.\n", nil)
-	sw.Do("// Public to allow building arbitrary schemes.\n", nil)
+	sw.Do("// RegisterDefaults adds defaulters functions to the given map.\n", nil)
+	sw.Do("// Public to allow building arbitrary maps.\n", nil)
 	sw.Do("// All generated defaulters are covering - they call all nested defaulters.\n", nil)
-	sw.Do("func RegisterDefaults(scheme $.|raw$) error {\n", schemePtr)
+	sw.Do("func RegisterDefaults(m map[reflect.Type]func(interface{})) error {\n", nil)
 	for _, t := range g.typesForInit {
 		args := defaultingArgsFromType(t)
-		sw.Do("scheme.AddTypeDefaultingFunc(&$.inType|raw${}, func(obj interface{}) { $.inType|objectdefaultfn$(obj.(*$.inType|raw$)) })\n", args)
+		sw.Do("m[reflect.TypeOf(&$.inType|raw${})] = func(obj interface{}) { $.inType|objectdefaultfn$(obj.(*$.inType|raw$)) }\n", args)
 	}
+	sw.Do("return nil\n", nil)
+	sw.Do("}\n\n", nil)
+
+	sw.Do("var m map[reflect.Type]func(interface{})\n", nil)
+	sw.Do("func init() { m = map[reflect.Type]func(interface{}){}\n", nil)
+	sw.Do("RegisterDefaults(m) }\n", nil)
+
+	sw.Do("// Default set default value for input object.\n", nil)
+	sw.Do("func Default(obj interface{}) error {\n", nil)
+	sw.Do("fn, ok := m[reflect.TypeOf(obj)]\n", nil)
+	sw.Do("if !ok { return fmt.Errorf(\"unknown type: %T\", obj) }\n", nil)
+	sw.Do("fn(obj)\n", nil)
 	sw.Do("return nil\n", nil)
 	sw.Do("}\n\n", nil)
 	return sw.Error()
